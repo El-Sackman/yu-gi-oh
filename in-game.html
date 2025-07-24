@@ -1,0 +1,385 @@
+<section id="in-game">
+    <h1>In Game</h1>
+    <p>Check your hand for possible fusions and in-game actions here.</p>
+    <div class="row" style="margin-top:2em;">
+        <div class="col s12 m7">
+            <h4>Board</h4>
+            <table id="game-board" style="width:100%;margin-bottom:2em;border-collapse:separate;border-spacing:8px;">
+                <tbody>
+                    <tr>
+                        <td class="board-cell" data-row="0" data-col="0" style="width:70px;height:100px;border:2px dashed #aaa;background:#f5f5f5;text-align:center;"></td>
+                        <td class="board-cell" data-row="0" data-col="1" style="width:70px;height:100px;border:2px dashed #aaa;background:#f5f5f5;text-align:center;"></td>
+                        <td class="board-cell" data-row="0" data-col="2" style="width:70px;height:100px;border:2px dashed #aaa;background:#f5f5f5;text-align:center;"></td>
+                        <td class="board-cell" data-row="0" data-col="3" style="width:70px;height:100px;border:2px dashed #aaa;background:#f5f5f5;text-align:center;"></td>
+                        <td class="board-cell" data-row="0" data-col="4" style="width:70px;height:100px;border:2px dashed #aaa;background:#f5f5f5;text-align:center;"></td>
+                    </tr>
+                    <tr>
+                        <td class="board-cell" data-row="1" data-col="0" style="width:70px;height:100px;border:2px dashed #aaa;background:#f5f5f5;text-align:center;"></td>
+                        <td class="board-cell" data-row="1" data-col="1" style="width:70px;height:100px;border:2px dashed #aaa;background:#f5f5f5;text-align:center;"></td>
+                        <td class="board-cell" data-row="1" data-col="2" style="width:70px;height:100px;border:2px dashed #aaa;background:#f5f5f5;text-align:center;"></td>
+                        <td class="board-cell" data-row="1" data-col="3" style="width:70px;height:100px;border:2px dashed #aaa;background:#f5f5f5;text-align:center;"></td>
+                        <td class="board-cell" data-row="1" data-col="4" style="width:70px;height:100px;border:2px dashed #aaa;background:#f5f5f5;text-align:center;"></td>
+                    </tr>
+                </tbody>
+            </table>
+            <h4>Your Hand</h4>
+            <div id="hand-slots" style="display:flex;gap:12px;justify-content:flex-start;align-items:center;">
+                <div class="hand-slot card-slot" data-slot="0"><div class="slot-inner empty"></div></div>
+                <div class="hand-slot card-slot" data-slot="1"><div class="slot-inner empty"></div></div>
+                <div class="hand-slot card-slot" data-slot="2"><div class="slot-inner empty"></div></div>
+                <div class="hand-slot card-slot" data-slot="3"><div class="slot-inner empty"></div></div>
+                <div class="hand-slot card-slot" data-slot="4"><div class="slot-inner empty"></div></div>
+            </div>
+            <div id="hand-merges-section" style="margin-top:18px;max-height:220px;overflow-y:auto;"></div>
+        </div>
+        <div class="col s12 m5">
+            <ul class="tabs" id="deck-graveyard-tabs">
+                <li class="tab col s6"><a class="active" href="#deck-tab">Your Deck (<span id="deck-count">0</span>)</a></li>
+                <li class="tab col s6"><a href="#graveyard-tab">Graveyard (<span id="graveyard-count">0</span>)</a></li>
+            </ul>
+            <div id="deck-tab" class="tab-content">
+                <div class="input-field" style="margin-bottom:0.5em;">
+                    <input id="deck-search" type="text" class="validate" autocomplete="off">
+                    <label for="deck-search">Search deck...</label>
+                    <ul id="deck-search-suggestions" class="collection z-depth-2" style="position:absolute;left:0;right:0;display:none;max-height:220px;overflow-y:auto;z-index: 1002;"></ul>
+                </div>
+                <ul id="in-game-deck-list" class="collection" style="max-height:320px;overflow-y:auto;"></ul>
+            </div>
+            <div id="graveyard-tab" class="tab-content" style="display:none;">
+                <ul id="graveyard-list" class="collection" style="max-height:320px;overflow-y:auto;"></ul>
+            </div>
+        </div>
+    </div>
+</section>
+<script>
+$(function() {
+    // Load deck from localStorage
+    let deck = window.StorageLib ? StorageLib.get('deck', []) : [];
+    let hand = [null, null, null, null, null];
+    let graveyard = [];
+    let cardsCache = null;
+    // Helper to render hand
+    function renderHand(cards) {
+        // Load fusion/equip data if not already loaded
+        if (!renderHand.fusionData || !renderHand.equipsData) {
+            $.when(
+                $.getJSON('public/fusion.json', function(data) { renderHand.fusionData = data; }),
+                $.getJSON('public/equips.json', function(data) { renderHand.equipsData = data; })
+            ).then(function() { renderHand(cards); });
+            return;
+        }
+        var fusionData = renderHand.fusionData;
+        var equipsData = renderHand.equipsData;
+        for (let i = 0; i < 5; ++i) {
+            const slot = $(`#hand-slots .card-slot[data-slot="${i}"]`);
+            const slotInner = slot.find('.slot-inner');
+            let borderColor = '';
+            if (hand[i] && cards) {
+                const card = cards.find(c => c.Id === hand[i]);
+                if (card) {
+                    // Check for possible fusions with other cards in hand
+                    let canFuse = false, canEquip = false;
+                    // Fusions: check if this card can fuse with any other in hand
+                    if (fusionData[card.Id]) {
+                        for (let j = 0; j < 5; ++j) {
+                            if (i === j || !hand[j]) continue;
+                            const otherId = hand[j];
+                            if (fusionData[card.Id].some(f => f.card === otherId)) {
+                                canFuse = true;
+                                break;
+                            }
+                        }
+                    }
+                    // Equips: check if this card can be equipped by any other in hand
+                    if (equipsData[card.Id]) {
+                        for (let j = 0; j < 5; ++j) {
+                            if (i === j || !hand[j]) continue;
+                            const otherId = hand[j];
+                            if (equipsData[card.Id].includes(otherId)) {
+                                canEquip = true;
+                                break;
+                            }
+                        }
+                    }
+                    // Set border color: purple if both, blue if fusion, orange if equip
+                    if (canFuse && canEquip) borderColor = '#9c27b0'; // purple
+                    else if (canFuse) borderColor = '#1976d2'; // blue
+                    else if (canEquip) borderColor = '#ff9800'; // orange
+                    slotInner.removeClass('empty').html(`<img src="${card.img}" alt="" style="width:70px;height:100px;object-fit:contain;display:block;margin:0 auto 4px auto;"/><div style='font-size:0.9em;text-align:center;'>#${card.Id.toString().padStart(3,'0')}</div>`);
+                } else {
+                    slotInner.addClass('empty').html("");
+                }
+            } else {
+                slotInner.addClass('empty').html("");
+            }
+            // Set border color
+            if (borderColor) {
+                slot.css('border', `3px solid ${borderColor}`);
+            } else {
+                slot.css('border', '2px dashed #1976d2');
+            }
+        }
+        // After rendering hand slots, show possible merges
+        let mergesHtml = '';
+        let foundMerges = [];
+        // Fusions
+        for (let i = 0; i < 5; ++i) {
+            if (!hand[i]) continue;
+            const cardA = cards.find(c => c.Id === hand[i]);
+            if (!cardA) continue;
+            if (fusionData[cardA.Id]) {
+                for (let j = 0; j < 5; ++j) {
+                    if (i === j || !hand[j]) continue;
+                    const cardB = cards.find(c => c.Id === hand[j]);
+                    if (!cardB) continue;
+                    const fusion = fusionData[cardA.Id].find(f => f.card === cardB.Id);
+                    if (fusion) {
+                        const result = cards.find(c => c.Id === fusion.result);
+                        if (result) {
+                            // Avoid duplicate pairs (A+B and B+A)
+                            if (!foundMerges.some(m => m.type==='fusion' && ((m.a===cardA.Id && m.b===cardB.Id) || (m.a===cardB.Id && m.b===cardA.Id)))) {
+                                foundMerges.push({type:'fusion', a:cardA.Id, b:cardB.Id, result:result.Id});
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Equips
+        for (let i = 0; i < 5; ++i) {
+            if (!hand[i]) continue;
+            const cardA = cards.find(c => c.Id === hand[i]);
+            if (!cardA) continue;
+            if (equipsData[cardA.Id]) {
+                for (let j = 0; j < 5; ++j) {
+                    if (i === j || !hand[j]) continue;
+                    const cardB = cards.find(c => c.Id === hand[j]);
+                    if (!cardB) continue;
+                    if (equipsData[cardA.Id].includes(cardB.Id)) {
+                        // Avoid duplicate pairs (A+B and B+A)
+                        if (!foundMerges.some(m => m.type==='equip' && ((m.a===cardA.Id && m.b===cardB.Id) || (m.a===cardB.Id && m.b===cardA.Id)))) {
+                            foundMerges.push({type:'equip', a:cardA.Id, b:cardB.Id});
+                        }
+                    }
+                }
+            }
+        }
+        if (foundMerges.length > 0) {
+            mergesHtml += '<h5>Possible Merges in Hand</h5>';
+            mergesHtml += '<ul class="merge-list-view" style="list-style:none;padding:0;margin:0;">';
+            foundMerges.forEach((m, idx) => {
+                if (m.type === 'fusion') {
+                    const cardA = cards.find(c => c.Id === m.a);
+                    const cardB = cards.find(c => c.Id === m.b);
+                    const result = cards.find(c => c.Id === m.result);
+                    mergesHtml += `<li class="merge-list-item" data-a="${cardA.Id}" data-b="${cardB.Id}" style="margin-bottom:16px;padding:8px 0;">
+                        <div style="display:flex;align-items:center;gap:18px;justify-content:flex-start;">
+                            <div class="merge-card-thumb" data-handid="${cardA.Id}" style='text-align:center;cursor:pointer;'>
+                                <div style='font-size:1.2em;font-weight:bold;'>#${cardA.Id.toString().padStart(3,'0')}</div>
+                                <img src="${cardA.img}" alt="${cardA.Name}" title="${cardA.Name}" style="height:56px;width:40px;object-fit:contain;border-radius:8px;box-shadow:0 2px 8px rgba(25,118,210,0.10);">
+                            </div>
+                            <span style="font-size:2em;">+</span>
+                            <div class="merge-card-thumb" data-handid="${cardB.Id}" style='text-align:center;cursor:pointer;'>
+                                <div style='font-size:1.2em;font-weight:bold;'>#${cardB.Id.toString().padStart(3,'0')}</div>
+                                <img src="${cardB.img}" alt="${cardB.Name}" title="${cardB.Name}" style="height:56px;width:40px;object-fit:contain;border-radius:8px;box-shadow:0 2px 8px rgba(25,118,210,0.10);">
+                            </div>
+                            <span style="font-size:2em;">→</span>
+                            <div style='text-align:center;'>
+                                <img src="${result.img}" alt="${result.Name}" title="${result.Name}" style="height:80px;width:56px;object-fit:contain;border-radius:10px;border:2px solid #1976d2;box-shadow:0 2px 12px rgba(25,118,210,0.18);">
+                                <div style='font-size:1.18em;font-weight:bold;margin-top:2px;'>#${result.Id.toString().padStart(3,'0')}</div>
+                                <div style='font-size:1.05em;color:#1976d2;'>ATK/${result.Attack} DEF/${result.Defense}</div>
+                            </div>
+                            <span style='margin-left:12px;color:#1976d2;font-weight:bold;'>Fusion</span>
+                        </div>
+                    </li>`;
+                } else if (m.type === 'equip') {
+                    const cardA = cards.find(c => c.Id === m.a);
+                    const cardB = cards.find(c => c.Id === m.b);
+                    mergesHtml += `<li class="merge-list-item" data-a="${cardA.Id}" data-b="${cardB.Id}" style="margin-bottom:16px;padding:8px 0;">
+                        <div style="display:flex;align-items:center;gap:18px;justify-content:flex-start;">
+                            <div class="merge-card-thumb" data-handid="${cardA.Id}" style='text-align:center;cursor:pointer;'>
+                                <div style='font-size:1.2em;font-weight:bold;'>#${cardA.Id.toString().padStart(3,'0')}</div>
+                                <img src="${cardA.img}" alt="${cardA.Name}" title="${cardA.Name}" style="height:56px;width:40px;object-fit:contain;border-radius:8px;box-shadow:0 2px 8px rgba(255,152,0,0.10);">
+                            </div>
+                            <span style="font-size:2em;">+</span>
+                            <div class="merge-card-thumb" data-handid="${cardB.Id}" style='text-align:center;cursor:pointer;'>
+                                <div style='font-size:1.2em;font-weight:bold;'>#${cardB.Id.toString().padStart(3,'0')}</div>
+                                <img src="${cardB.img}" alt="${cardB.Name}" title="${cardB.Name}" style="height:56px;width:40px;object-fit:contain;border-radius:8px;box-shadow:0 2px 8px rgba(255,152,0,0.10);">
+                            </div>
+                            <span style="font-size:2em;">→</span>
+                            <span style="font-size:1.25em;color:#ff9800;font-weight:bold;">Equip</span>
+                        </div>
+                    </li>`;
+                }
+            });
+            mergesHtml += '</ul>';
+        } else {
+            mergesHtml += '<div class="grey-text" style="margin-top:10px;">No possible merges in hand.</div>';
+        }
+        $('#hand-merges-section').html(mergesHtml);
+        // Add discard (click to remove) handler for hand slots
+        $('#hand-slots .card-slot').off('click').on('click', function() {
+            const idx = parseInt($(this).attr('data-slot'), 10);
+            if (hand[idx]) {
+                graveyard.unshift(hand[idx]); // Add to graveyard (top)
+                hand[idx] = null;
+                renderHand(cards);
+                renderGraveyard(cards);
+            }
+        });
+    }
+    function renderGraveyard(cards) {
+        let html = '';
+        if (graveyard.length === 0) {
+            html = '<li class="collection-item grey-text">Graveyard is empty</li>';
+        } else {
+            html = graveyard.map(cardId => {
+                const card = cards.find(c => c.Id === cardId);
+                if (!card) return '';
+                return `<li class="collection-item"><img src="${card.img}" alt="" style="height:32px;width:32px;object-fit:contain;margin-right:8px;vertical-align:middle;">#${card.Id.toString().padStart(3,'0')} - ${card.Name}</li>`;
+            }).join('');
+        }
+        $('#graveyard-list').html(html);
+        $('#graveyard-count').text(graveyard.length);
+    }
+    // Load all cards
+    $.getJSON('public/cards.json', function(cards) {
+        cardsCache = cards;
+        // Render deck list
+        let html = '';
+        if (deck.length === 0) {
+            html = '<li class="collection-item grey-text">Deck is empty</li>';
+        } else {
+            // Count occurrences
+            const countMap = {};
+            deck.forEach(cardId => { countMap[cardId] = (countMap[cardId]||0)+1; });
+            let uniqueIds = Object.keys(countMap).map(Number);
+            uniqueIds.sort((a,b)=>a-b);
+            html = uniqueIds.map(cardId => {
+                const card = cards.find(c => c.Id === cardId);
+                if (!card) return '';
+                let badge = countMap[cardId] > 1 ? `<span class='badge blue white-text'>x${countMap[cardId]}</span>` : '';
+                return `<li class="collection-item"><img src="${card.img}" alt="" style="height:32px;width:32px;object-fit:contain;margin-right:8px;vertical-align:middle;">#${card.Id.toString().padStart(3,'0')} - ${card.Name} ${badge}</li>`;
+            }).join('');
+        }
+        $('#in-game-deck-list').html(html);
+        $('#deck-count').text(deck.length);
+        renderHand(cards);
+        renderGraveyard(cards);
+        let $suggestBox = $('#deck-search-suggestions');
+        let lastSuggestions = [];
+        // Helper to get deck cards as objects
+        function getDeckCards(cards) {
+            const countMap = {};
+            deck.forEach(cardId => { countMap[cardId] = (countMap[cardId]||0)+1; });
+            let uniqueIds = Object.keys(countMap).map(Number);
+            return uniqueIds.map(cardId => {
+                const card = cards.find(c => c.Id === cardId);
+                return card ? { ...card, count: countMap[cardId] } : null;
+            }).filter(Boolean);
+        }
+        // Deck search suggestions
+        $('#deck-search').on('input', function() {
+            const val = $(this).val().toLowerCase();
+            if (!val) { $suggestBox.hide(); return; }
+            const deckCards = getDeckCards(cards);
+            lastSuggestions = deckCards.filter(card =>
+                card.Name.toLowerCase().includes(val) ||
+                card.Id.toString().padStart(3,'0').includes(val)
+            ).sort((a, b) => {
+                // Prioritize exact number match, then name match, then partials
+                if (a.Id.toString().padStart(3,'0') === val) return -1;
+                if (b.Id.toString().padStart(3,'0') === val) return 1;
+                if (a.Name.toLowerCase() === val) return -1;
+                if (b.Name.toLowerCase() === val) return 1;
+                // Then by startsWith
+                if (a.Name.toLowerCase().startsWith(val) && !b.Name.toLowerCase().startsWith(val)) return -1;
+                if (!a.Name.toLowerCase().startsWith(val) && b.Name.toLowerCase().startsWith(val)) return 1;
+                // Then by id order
+                return a.Id - b.Id;
+            }).slice(0, 8);
+            if (lastSuggestions.length === 0) { $suggestBox.hide(); return; }
+            $suggestBox.html(lastSuggestions.map((card, i) =>
+                `<li class="collection-item suggestion-item" data-idx="${i}"><img src="${card.img}" style="height:28px;width:28px;vertical-align:middle;margin-right:8px;">#${card.Id.toString().padStart(3,'0')} - ${card.Name}${card.count > 1 ? ` <span class='badge blue white-text'>x${card.count}</span>` : ''}</li>`
+            ).join('')).show();
+        });
+        // Hide suggestions on blur (with delay for click)
+        $('#deck-search').on('blur', function() { setTimeout(() => $suggestBox.hide(), 200); });
+        // Helper to add card to hand and remove from deck
+        function addToHand(cardId, cards) {
+            let slotIdx = hand.findIndex(x => !x);
+            if (slotIdx === -1) {
+                M.toast && M.toast({html: 'Hand is full!'});
+                return;
+            }
+            // Remove one instance from deck
+            const deckIdx = deck.indexOf(cardId);
+            if (deckIdx === -1) {
+                M.toast && M.toast({html: 'Card not found in deck!'});
+                return;
+            }
+            deck.splice(deckIdx, 1);
+            hand[slotIdx] = cardId;
+            renderHand(cards);
+            // Re-render deck list
+            let html = '';
+            if (deck.length === 0) {
+                html = '<li class="collection-item grey-text">Deck is empty</li>';
+            } else {
+                const countMap = {};
+                deck.forEach(cardId => { countMap[cardId] = (countMap[cardId]||0)+1; });
+                let uniqueIds = Object.keys(countMap).map(Number);
+                uniqueIds.sort((a,b)=>a-b);
+                html = uniqueIds.map(cardId => {
+                    const card = cards.find(c => c.Id === cardId);
+                    if (!card) return '';
+                    let badge = countMap[cardId] > 1 ? `<span class='badge blue white-text'>x${countMap[cardId]}</span>` : '';
+                    return `<li class="collection-item"><img src="${card.img}" alt="" style="height:32px;width:32px;object-fit:contain;margin-right:8px;vertical-align:middle;">#${card.Id.toString().padStart(3,'0')} - ${card.Name} ${badge}</li>`;
+                }).join('');
+            }
+            $('#in-game-deck-list').html(html);
+            $('#deck-count').text(deck.length);
+        }
+        // Suggestion click
+        $suggestBox.on('click', '.suggestion-item', function() {
+            const idx = $(this).data('idx');
+            if (lastSuggestions[idx]) {
+                addToHand(lastSuggestions[idx].Id, cards);
+                $('#deck-search').val("");
+                $suggestBox.hide();
+            }
+        });
+        // Deck search logic (Enter key)
+        $('#deck-search').on('keydown', function(e) {
+            if (e.key === 'Enter') {
+                if (lastSuggestions.length > 0) {
+                    addToHand(lastSuggestions[0].Id, cards);
+                    $(this).val("");
+                    $suggestBox.hide();
+                } else {
+                    M.toast && M.toast({html: 'Card not found in deck!'});
+                }
+                e.preventDefault();
+            }
+        });
+        // Deck list click
+        $('#in-game-deck-list').on('click', '.collection-item', function() {
+            const text = $(this).text();
+            const match = text.match(/#(\d{3})/);
+            if (!match) return;
+            const cardId = parseInt(match[1], 10);
+            const card = cards.find(c => c.Id === cardId);
+            if (!card) return;
+            addToHand(card.Id, cards);
+        });
+    });
+    // Tabs logic
+    $('#deck-graveyard-tabs').tabs({
+        onShow: function(tab) {
+            if (tab.id === 'graveyard-tab') {
+                renderGraveyard(cardsCache);
+            }
+        }
+    });
+});
+</script>

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Basic Material Design Page</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.100.2/css/materialize.min.css">
+    <script type="text/javascript" src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.100.2/js/materialize.min.js"></script>
+    <script src="public/localStorageLib.js"></script>
+    <link rel="stylesheet" href="public/yu-gi-oh.css">
+</head>
+<body>
+    <nav>
+        <div class="nav-wrapper">
+            <a href="#" class="brand-logo">Logo</a>
+            <a href="#" data-activates="side-nav-mobile" class="button-collapse"><i class="material-icons">menu</i></a>
+            <ul id="nav-mobile" class="right hide-on-med-and-down">
+                <li><a href="#your-cards" class="nav-link" data-section="your-cards.html">Your Cards</a></li>
+                <li><a href="#in-game" class="nav-link" data-section="in-game.html">In Game</a></li>
+                <li><a href="#all-cards" class="nav-link" data-section="all-cards.html">All Cards</a></li>
+                <li><a href="#enemies" class="nav-link" data-section="enemies.html">Enemies</a></li>
+            </ul>
+            <ul class="side-nav" id="side-nav-mobile">
+                <li><a href="#your-cards" class="nav-link" data-section="your-cards.html">Your Cards</a></li>
+                <li><a href="#in-game" class="nav-link" data-section="in-game.html">In Game</a></li>
+                <li><a href="#all-cards" class="nav-link" data-section="all-cards.html">All Cards</a></li>
+                <li><a href="#enemies" class="nav-link" data-section="enemies.html">Enemies</a></li>
+            </ul>
+        </div>
+    </nav>
+    <div class="container">
+        <div class="row">
+            <div class="col s12">
+                <div id="main-content"></div>
+            </div>
+        </div>
+    </div>
+    <script>
+    $(function() {
+        // Helper: get section from hash or localStorage
+        function getInitialSection() {
+            var hash = window.location.hash.replace('#', '');
+            if (hash) {
+                switch(hash) {
+                    case 'your-cards': return 'your-cards.html';
+                    case 'in-game': return 'in-game.html';
+                    case 'all-cards': return 'all-cards.html';
+                    case 'enemies': return 'enemies.html';
+                }
+            }
+            var last = localStorage.getItem('lastSection');
+            return last || 'your-cards.html';
+        }
+        function setSection(section) {
+            localStorage.setItem('lastSection', section);
+        }
+        function loadSection(section) {
+            $("#main-content").load(section);
+        }
+        // Initialize mobile menu (fix: use correct id)
+        $(".button-collapse").sideNav({
+            menuWidth: 240,
+            edge: 'left',
+            closeOnClick: true
+        });
+        // Load initial section
+        var initialSection = getInitialSection();
+        loadSection(initialSection);
+        // Set nav active state
+        function setActiveNav(section) {
+            $('.nav-link').removeClass('active');
+            $('.nav-link[data-section="'+section+'"], .side-nav .nav-link[data-section="'+section+'"], .right .nav-link[data-section="'+section+'"').addClass('active');
+        }
+        setActiveNav(initialSection);
+        // Navigation click
+        $(document).on("click", ".nav-link", function(e) {
+            e.preventDefault();
+            var section = $(this).data('section');
+            setSection(section);
+            loadSection(section);
+            setActiveNav(section);
+            // Update hash for browser navigation
+            var hash = section.replace('.html','');
+            window.location.hash = hash;
+            // Close sidenav on mobile after click
+            if ($(window).width() < 993) {
+                $(".button-collapse").sideNav('hide');
+            }
+        });
+        // Listen for hashchange (back/forward navigation)
+        $(window).on('hashchange', function() {
+            var hash = window.location.hash.replace('#', '');
+            var section = getInitialSection();
+            setSection(section);
+            loadSection(section);
+            setActiveNav(section);
+        });
+    });
+    </script>
+</body>
+</html>

@@ -1,0 +1,506 @@
+<head>
+    <!-- ...existing head content... -->
+    
+</head>
+<section id="your-cards">
+    <div class="row">
+        <div class="col s12">
+            <div class="input-field">
+                <input id="search-cards" type="text" class="validate">
+                <label for="search-cards">Search cards...</label>
+            </div>
+        </div>
+        <div class="col s12 m6">
+            <div class="deck-title-row" style="display:flex;align-items:center;gap:12px;">
+                <h3 style="margin-bottom:0;">Deck (<span id="deck-count">0</span>)</h3>
+                <select id="deck-sort-mode" class="browser-default" style="width:auto;display:inline-block;margin-left:12px;max-width:180px;">
+                    <option value="number-asc">By Number (Asc)</option>
+                    <option value="number-desc">By Number (Desc)</option>
+                    <option value="merges-desc">By Merges (Desc)</option>
+                    <option value="merges-asc">By Merges (Asc)</option>
+                </select>
+            </div>
+            <ul class="collection" id="deck-list">
+                <li class="collection-item">Card</li>
+            </ul>
+        </div>
+        <div class="col s12 m6">
+            <div class="chest-title-row" style="display:flex;align-items:center;gap:12px;">
+                <h3 style="margin-bottom:0;">Chest</h3>
+                <select id="chest-sort-mode" class="browser-default" style="width:auto;display:inline-block;margin-left:12px;max-width:180px;">
+                    <option value="number-asc">By Number (Asc)</option>
+                    <option value="number-desc">By Number (Desc)</option>
+                    <option value="merges-desc">By Merges (Desc)</option>
+                    <option value="merges-asc">By Merges (Asc)</option>
+                </select>
+            </div>
+            <ul class="collection" id="chest-list">
+                <li class="collection-item">Card</li>
+            </ul>
+        </div>
+    </div>
+    <script>
+    $(function() {
+        let allCards = [];
+        let deck = [];
+        let chest = [];
+        const DECK_KEY = 'deck';
+        const CHEST_KEY = 'chest';
+        const MAX_DECK = 40;
+
+        // Utility: render deck and chest lists
+        // Loads equips.json and fusion.json once, then caches
+        let equipsData = null;
+        let fusionData = null;
+        function loadEquipsAndFusion(cb) {
+            if (equipsData && fusionData) { cb(); return; }
+            $.when(
+                $.getJSON('public/equips.json', function(data) { equipsData = data; }),
+                $.getJSON('public/fusion.json', function(data) { fusionData = data; })
+            ).then(cb);
+        }
+        function hasEquip(cardId) {
+            if (!equipsData) return false;
+            return Array.isArray(equipsData[cardId]) && equipsData[cardId].length > 0;
+        }
+        function hasFusion(cardId) {
+            if (!fusionData) return false;
+            return Array.isArray(fusionData[cardId]) && fusionData[cardId].length > 0;
+        }
+        // Sorting/filter controls
+        const sortOptions = `
+    <div class="row" style="margin-bottom:0.5em;">
+        <div class="col s12 m6" style="display:flex;align-items:center;">
+            <h3 style="margin-bottom:0;flex:1;">Deck (<span id="deck-count">0</span>)</h3>
+            <select id="deck-sort-mode" class="browser-default" style="width:auto;display:inline-block;margin-left:12px;max-width:180px;">
+                <option value="number-asc">By Number (Asc)</option>
+                <option value="number-desc">By Number (Desc)</option>
+                <option value="merges-desc">By Merges (Desc)</option>
+                <option value="merges-asc">By Merges (Asc)</option>
+            </select>
+        </div>
+        <div class="col s12 m6" style="display:flex;align-items:center;">
+            <h3 style="margin-bottom:0;flex:1;">Chest</h3>
+            <select id="chest-sort-mode" class="browser-default" style="width:auto;display:inline-block;margin-left:12px;max-width:180px;">
+                <option value="number-asc">By Number (Asc)</option>
+                <option value="number-desc">By Number (Desc)</option>
+                <option value="merges-desc">By Merges (Desc)</option>
+                <option value="merges-asc">By Merges (Asc)</option>
+            </select>
+        </div>
+    </div>`;
+        if (!$('#deck-sort-mode').length) {
+            // Remove old titles and insert new row with titles and sorters
+            $('#deck-list').closest('.col').prev().remove(); // Remove old Deck h3
+            $('#chest-list').closest('.col').prev().remove(); // Remove old Chest h3
+            $(sortOptions).insertBefore('.row .col.s12.m6:first');
+        }
+        let deckSortMode = 'number-asc';
+        let chestSortMode = 'number-asc';
+        $(document).on('change', '#deck-sort-mode', function() {
+            deckSortMode = $(this).val();
+            renderAll();
+        });
+        $(document).on('change', '#chest-sort-mode', function() {
+            chestSortMode = $(this).val();
+            renderAll();
+        });
+
+        function getSortFn(mode, list) {
+            const deckSet = new Set(deck);
+            return function(a, b) {
+                if (mode === 'number-asc') return a - b;
+                if (mode === 'number-desc') return b - a;
+                if (mode === 'merges-desc' || mode === 'merges-asc') {
+                    // Sort by sum of possible equips and fusions in deck
+                    const eqA = (equipsData && Array.isArray(equipsData[a])) ? equipsData[a].filter(eqId => deckSet.has(eqId)).length : 0;
+                    const eqB = (equipsData && Array.isArray(equipsData[b])) ? equipsData[b].filter(eqId => deckSet.has(eqId)).length : 0;
+                    const fusA = (fusionData && Array.isArray(fusionData[a])) ? fusionData[a].filter(f => deckSet.has(f.card)).length : 0;
+                    const fusB = (fusionData && Array.isArray(fusionData[b])) ? fusionData[b].filter(f => deckSet.has(f.card)).length : 0;
+                    const mergesA = eqA + fusA;
+                    const mergesB = eqB + fusB;
+                    if (mergesA !== mergesB) {
+                        return mode === 'merges-desc' ? mergesB - mergesA : mergesA - mergesB;
+                    }
+                    return a - b;
+                }
+                return a - b;
+            };
+        }
+
+        function renderList(list, containerId, type) {
+            loadEquipsAndFusion(function() {
+                if (list.length === 0) {
+                    $(containerId).html('<li class="collection-item grey-text">Empty</li>');
+                    return;
+                }
+                // Count occurrences of each cardId
+                const countMap = {};
+                list.forEach(cardId => {
+                    countMap[cardId] = (countMap[cardId] || 0) + 1;
+                });
+                let uniqueIds = Object.keys(countMap).map(Number);
+                // Sort by selected mode
+                let sortMode = (type === 'deck') ? deckSortMode : chestSortMode;
+                uniqueIds.sort(getSortFn(sortMode, list));
+                // For fusion/equip counts, build a Set of all cardIds in deck (for deck only)
+                const deckSet = new Set(deck);
+                const html = uniqueIds.map((cardId, idx) => {
+                    const card = allCards.find(c => c.Id === cardId);
+                    if (!card) return '';
+                    let rightContent = '';
+                    // Card number (with badge if more than one)
+                    let cardNumber = `#${card.Id.toString().padStart(3,'0')}`;
+                    if (countMap[cardId] > 1) {
+                        cardNumber += ` <span class='badge blue white-text'>x${countMap[cardId]}</span>`;
+                    }
+                    // Equip and fusion icons (fixed width)
+                    let icons = '';
+                    let equipCount = 0, fusionCount = 0;
+                    if (hasEquip(cardId)) {
+                        const equips = equipsData[cardId] || [];
+                        // Only count equips that are in the deck
+                        const deckSet = new Set(deck);
+                        equipCount = equips.filter(eqId => deckSet.has(eqId)).length;
+                        icons += `<span class="equip-icon-wrap equip-fixed" title="Equips"><i class="material-icons tiny orange-text">build</i>${equipCount > 0 ? `<span class='equip-count'>${equipCount}</span>` : ''}</span>`;
+                    }
+                    if (hasFusion(cardId)) {
+                        const fusions = fusionData[cardId] || [];
+                        const deckSet = new Set(deck);
+                        fusionCount = fusions.filter(f => deckSet.has(f.card)).length;
+                        icons += `<span class="fusion-icon-wrap fusion-fixed" title="Fusions"><i class="material-icons tiny blue-text">auto_awesome</i>${fusionCount > 0 ? `<span class='fusion-count'>${fusionCount}</span>` : ''}</span>`;
+                    }
+                    // Move and delete buttons
+                    let moveBtn = '';
+                    if (type === 'deck') {
+                        moveBtn = `<a href="#" class="secondary-content move-to-chest-btn" title="Move to Chest"><i class="material-icons teal-text">arrow_forward</i></a>`;
+                    } else if (type === 'chest') {
+                        moveBtn = `<a href="#" class="secondary-content move-to-deck-btn" title="Move to Deck"><i class="material-icons teal-text">arrow_back</i></a>`;
+                    }
+                    let deleteBtn = `<a href="#" class="secondary-content remove-card-btn" title="Remove"><i class="material-icons red-text">delete</i></a>`;
+                    rightContent = `<span class="card-item-right">${icons}${moveBtn}${deleteBtn}</span>`;
+                    return `<li class="collection-item" data-idx="${idx}" data-type="${type}" data-cardid="${cardId}">
+                        <img src="${card.img}" alt="" class="card-thumb">
+                        <span class="card-item-name">${cardNumber}:${card.Name}</span>
+                        ${rightContent}
+                    </li>`;
+                }).join('');
+                $(containerId).html(html);
+            });
+        }
+
+        // Load from localStorage
+        function loadUserCards() {
+            deck = StorageLib.get(DECK_KEY, []);
+            chest = StorageLib.get(CHEST_KEY, []);
+        }
+        // Save to localStorage
+        function saveUserCards() {
+            StorageLib.set(DECK_KEY, deck);
+            StorageLib.set(CHEST_KEY, chest);
+        }
+
+        // Render both lists
+        function renderAll() {
+            // Sort deck by card Id before rendering
+            deck.sort((a, b) => a - b);
+            renderList(deck, '#deck-list', 'deck');
+            renderList(chest, '#chest-list', 'chest');
+            // Update deck count in the h3
+            $("#deck-count").text(deck.length);
+        }
+
+        // Suggestion dropdown
+        let $suggestBox = $('<ul id="card-suggestions" class="collection z-depth-2"></ul>');
+        $('#search-cards').after($suggestBox);
+        let lastSuggestions = [];
+
+        // Load all cards
+        $.getJSON('public/cards.json', function(cards) {
+            allCards = cards;
+            loadUserCards();
+            renderAll();
+        });
+
+        // Search and show suggestions
+        $('#search-cards').on('input', function() {
+            const val = $(this).val().toLowerCase();
+            if (!val) { $suggestBox.hide(); return; }
+            lastSuggestions = allCards.filter(card =>
+                card.Name.toLowerCase().includes(val) ||
+                card.Id.toString().padStart(3,'0').includes(val)
+            ).slice(0, 8);
+            if (lastSuggestions.length === 0) { $suggestBox.hide(); return; }
+            $suggestBox.html(lastSuggestions.map((card, i) =>
+                `<li class="collection-item suggestion-item" data-idx="${i}"><img src="${card.img}" style="height:28px;width:28px;vertical-align:middle;margin-right:8px;">#${card.Id.toString().padStart(3,'0')} - ${card.Name}</li>`
+            ).join('')).show();
+        });
+
+        // Add card to deck/chest
+        function addCard(cardId) {
+            if (deck.length < MAX_DECK) {
+                deck.push(cardId);
+            } else {
+                chest.push(cardId);
+            }
+            saveUserCards();
+            renderAll();
+        }
+
+        // Handle suggestion click
+        $suggestBox.on('click', '.suggestion-item', function() {
+            const idx = $(this).data('idx');
+            if (lastSuggestions[idx]) {
+                addCard(lastSuggestions[idx].Id);
+                $suggestBox.hide();
+                $('#search-cards').val('');
+            }
+        });
+
+        // Handle Enter key
+        $('#search-cards').on('keydown', function(e) {
+            if (e.key === 'Enter' && lastSuggestions.length > 0) {
+                addCard(lastSuggestions[0].Id);
+                $suggestBox.hide();
+                $(this).val('');
+                e.preventDefault();
+            }
+        });
+
+        // Hide suggestions on blur (with delay for click)
+        $('#search-cards').on('blur', function() { setTimeout(() => $suggestBox.hide(), 200); });
+
+        // Remove card handler (delegated)
+        $(document).on('click', '.remove-card-btn', function(e) {
+            e.preventDefault();
+            const $li = $(this).closest('li.collection-item');
+            const type = $li.data('type');
+            const cardId = Number($li.data('cardid'));
+            const list = type === 'deck' ? deck : chest;
+            const card = allCards.find(c => c.Id === cardId);
+            if (!card) return;
+            if (confirm(`Remove one copy of #${card.Id.toString().padStart(3,'0')} - ${card.Name} from your ${type}?`)) {
+                // Remove only one instance
+                const idxToRemove = list.indexOf(cardId);
+                if (idxToRemove !== -1) list.splice(idxToRemove, 1);
+                saveUserCards();
+                renderAll();
+            }
+        });
+
+        // Move card between deck and chest (delegated)
+        $(document).on('click', '.move-to-chest-btn', function(e) {
+            e.preventDefault();
+            const $li = $(this).closest('li.collection-item');
+            const cardId = Number($li.data('cardid'));
+            // Remove one from deck, add to chest
+            const idxToRemove = deck.indexOf(cardId);
+            if (idxToRemove !== -1) {
+                deck.splice(idxToRemove, 1);
+                chest.push(cardId);
+                saveUserCards();
+                renderAll();
+            }
+        });
+        $(document).on('click', '.move-to-deck-btn', function(e) {
+            e.preventDefault();
+            const $li = $(this).closest('li.collection-item');
+            const cardId = Number($li.data('cardid'));
+            // Only move if deck not full
+            if (deck.length < MAX_DECK) {
+                // Remove one from chest, add to deck
+                const idxToRemove = chest.indexOf(cardId);
+                if (idxToRemove !== -1) {
+                    chest.splice(idxToRemove, 1);
+                    deck.push(cardId);
+                    saveUserCards();
+                    renderAll();
+                }
+            } else {
+                alert('Deck is full (40 cards max).');
+            }
+        });
+
+        // Modal HTML (append once)
+        if (!$('#card-detail-modal').length) {
+            $("body").append(`
+            <div id="card-detail-modal" class="modal">
+                <div class="modal-content">
+                    <span class="modal-close-btn right" style="cursor:pointer;font-size:2em;line-height:1;">&times;</span>
+                    <h4 id="modal-card-title"></h4>
+                    <div class="row">
+                        <div class="col s12 m4">
+                            <img id="modal-card-img" src="" alt="" style="width:100%;max-width:180px;object-fit:contain;">
+                            <div id="modal-card-copies" style="margin-top:8px;"></div>
+                        </div>
+                        <div class="col s12 m8">
+                            <p id="modal-card-desc"></p>
+                            <div style="margin-bottom:10px;">
+                                <label style="user-select:none;cursor:pointer;display:flex;align-items:center;gap:6px;">
+                                    <input type="checkbox" id="modal-hide-unavailable" class="filled-in" />
+                                    <span style="vertical-align:middle;">Hide unavailable options</span>
+                                </label>
+                            </div>
+                            <div id="modal-fusion-section"></div>
+                            <div id="modal-equip-section"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <a href="#!" class="modal-close waves-effect waves-green btn-flat">Close</a>
+                </div>
+            </div>`);
+            // Always (re)init modal after appending
+            if (window.M && M.Modal) {
+                M.Modal.init($('#card-detail-modal'));
+            }
+            // Add close handler for custom close button
+            $(document).on('click', '#card-detail-modal .modal-close-btn', function() {
+                if (window.M && M.Modal) {
+                    var modalInstance = M.Modal.getInstance($('#card-detail-modal'));
+                    if (modalInstance) modalInstance.close();
+                } else {
+                    $('#card-detail-modal').hide();
+                }
+            });
+        }
+
+        // Card info tooltip
+        if (!$('#card-info-tooltip').length) {
+            $("body").append('<div id="card-info-tooltip" style="display:none;position:fixed;z-index:9999;pointer-events:none;background:#fff;border:1px solid #1976d2;border-radius:8px;padding:10px;box-shadow:0 2px 8px rgba(0,0,0,0.18);min-width:180px;max-width:320px;"></div>');
+        }
+
+        // Card item click handler
+        $(document).on('click', '.collection-item', function(e) {
+            // Ignore remove and move button clicks
+            if (
+                $(e.target).closest('.remove-card-btn').length ||
+                $(e.target).closest('.move-to-chest-btn').length ||
+                $(e.target).closest('.move-to-deck-btn').length
+            ) return;
+            const cardId = Number($(this).data('cardid'));
+            const card = allCards.find(c => c.Id === cardId);
+            if (!card) return;
+            // Card info
+            $('#modal-card-title').text(`#${card.Id.toString().padStart(3,'0')} - ${card.Name}`);
+            $('#modal-card-img').attr('src', card.img).attr('alt', card.Name);
+            $('#modal-card-desc').text(card.Description);
+            // Copies in deck
+            const deckCopies = deck.filter(id => id === cardId).length;
+            $('#modal-card-copies').html(`<b>Copies in Deck:</b> ${deckCopies}`);
+            // Hide unavailable filter state
+            let hideUnavailable = $('#modal-hide-unavailable').prop('checked');
+            // Fusion possibilities
+            function renderFusionSection() {
+                const fusions = hasFusion(cardId) ? (fusionData[cardId] || []) : [];
+                let total = fusions.length;
+                let possible = 0;
+                fusions.forEach(f => {
+                    const partner = allCards.find(c => c.Id === f.card);
+                    if (partner && deck.includes(partner.Id)) possible++;
+                });
+                let fusionHtml = `<h5>Fusion Possibilities <span style='font-size:0.9em;color:#1976d2;'>(${possible}/${total})</span></h5>`;
+                if (total > 0) {
+                    fusionHtml += '<div class="row">';
+                    fusions.forEach(f => {
+                        const partner = allCards.find(c => c.Id === f.card);
+                        const result = allCards.find(c => c.Id === f.result);
+                        if (!partner || !result) return;
+                        const inDeck = deck.includes(partner.Id);
+                        if (hideUnavailable && !inDeck) return;
+                        fusionHtml += `<div class="col s12 m6 l6 fusion-row fusion-hoverable" data-cardid="${partner.Id}" data-resultid="${result.Id}" style="display:flex;align-items:center;justify-content:center;gap:12px;opacity:${inDeck?1:0.4};margin-bottom:10px;">
+                            <div class="fusion-card-info" style="text-align:center;">
+                                <img src="${partner.img}" alt="${partner.Name}" style="height:48px;width:48px;object-fit:contain;" class="card-tooltip-hover" data-cardid="${partner.Id}"><br>
+                                <span style="font-size:0.95em;">#${partner.Id.toString().padStart(3,'0')}</span><br>
+                                <span style="font-size:0.85em;">ATK/${partner.Attack} DEF/${partner.Defense}</span>
+                            </div>
+                            <span style="font-size:1.5em;">→</span>
+                            <div class="fusion-result-info fusion-result-highlight" style="text-align:center;border:2px solid #1976d2;border-radius:8px;padding:6px 10px;background:#e3f2fd;">
+                                <img src="${result.img}" alt="${result.Name}" style="height:48px;width:48px;object-fit:contain;" class="card-tooltip-hover" data-cardid="${result.Id}"><br>
+                                <span style="font-size:0.95em;">#${result.Id.toString().padStart(3,'0')}</span><br>
+                                <span style="font-size:0.85em;">ATK/${result.Attack} DEF/${result.Defense}</span>
+                            </div>
+                        </div>`;
+                    });
+                    fusionHtml += '</div>';
+                } else {
+                    fusionHtml += '<p>No fusions available.</p>';
+                }
+                $('#modal-fusion-section').html(fusionHtml);
+            }
+            // Equip possibilities
+            function renderEquipSection() {
+                const equips = hasEquip(cardId) ? (equipsData[cardId] || []) : [];
+                let total = equips.length;
+                let possible = 0;
+                equips.forEach(eqId => {
+                    const eqCard = allCards.find(c => c.Id === eqId);
+                    if (eqCard && deck.includes(eqCard.Id)) possible++;
+                });
+                let equipHtml = `<h5>Equip Possibilities <span style='font-size:0.9em;color:#1976d2;'>(${possible}/${total})</span></h5>`;
+                if (total > 0) {
+                    equipHtml += '<div class="row">';
+                    equips.forEach(eqId => {
+                        const eqCard = allCards.find(c => c.Id === eqId);
+                        if (!eqCard) return;
+                        const inDeck = deck.includes(eqCard.Id);
+                        if (hideUnavailable && !inDeck) return;
+                        equipHtml += `<div class="col s6 m4 l3 equip-hoverable" style="opacity:${inDeck?1:0.4};text-align:center;">
+                            <img src="${eqCard.img}" alt="${eqCard.Name}" style="height:48px;width:48px;object-fit:contain;" class="card-tooltip-hover" data-cardid="${eqCard.Id}"><br>
+                            <span style="font-size:0.9em;">${eqCard.Name}</span>
+                        </div>`;
+                    });
+                    equipHtml += '</div>';
+                } else {
+                    equipHtml += '<p>No equips available.</p>';
+                }
+                $('#modal-equip-section').html(equipHtml);
+            }
+            // Initial render
+            renderFusionSection();
+            renderEquipSection();
+            // Filter checkbox handler
+            $(document).off('change.modal-hide-unavailable').on('change.modal-hide-unavailable', '#modal-hide-unavailable', function() {
+                hideUnavailable = $(this).prop('checked');
+                renderFusionSection();
+                renderEquipSection();
+            });
+            // Open modal
+            if (window.M && M.Modal) {
+                var modalInstance = M.Modal.getInstance($('#card-detail-modal'));
+                if (!modalInstance) {
+                    M.Modal.init($('#card-detail-modal'));
+                    modalInstance = M.Modal.getInstance($('#card-detail-modal'));
+                }
+                modalInstance.open();
+            } else {
+                $('#card-detail-modal').show();
+            }
+        });
+        // Tooltip logic for card info on hover
+        $(document).off('mouseenter.card-tooltip-hover mouseleave.card-tooltip-hover mousemove.card-tooltip-hover');
+        $(document).on('mouseenter.card-tooltip-hover', '.card-tooltip-hover', function(e) {
+            const cardId = Number($(this).data('cardid'));
+            const card = (window.allCards || (typeof allCards !== 'undefined' ? allCards : []))
+                .find(c => c.Id === cardId);
+            if (!card) return;
+            let html = `<div style="display:flex;align-items:center;gap:10px;">
+                <img src="${card.img}" alt="${card.Name}" style="height:60px;width:60px;object-fit:contain;border-radius:6px;">
+                <div><b>#${card.Id.toString().padStart(3,'0')} - ${card.Name}</b><br>
+                <span>ATK: ${card.Attack} DEF: ${card.Defense}</span><br>
+                <span style='font-size:0.95em;'>${card.Description || ''}</span></div>
+            </div>`;
+            $('#card-info-tooltip').html(html).show();
+        }).on('mouseleave.card-tooltip-hover', '.card-tooltip-hover', function() {
+            $('#card-info-tooltip').hide();
+        }).on('mousemove.card-tooltip-hover', '.card-tooltip-hover', function(e) {
+            // Offset tooltip from mouse
+            const offsetX = 18, offsetY = 12;
+            $('#card-info-tooltip').css({
+                left: e.clientX + offsetX,
+                top: e.clientY + offsetY
+            });
+        });
+    });
+    </script>
+</section>

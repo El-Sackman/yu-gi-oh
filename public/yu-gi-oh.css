@@ -1,0 +1,221 @@
+/* yu-gi-oh custom styles */
+
+#deck-list,
+#chest-list {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.badge.blue.white-text {
+  margin-left: 8px;
+}
+
+#card-suggestions {
+  position: absolute;
+  z-index: 10;
+  max-height: 220px;
+  overflow-y: auto;
+  width: 100%;
+  display: none;
+}
+
+.collection-item img {
+  height: 32px;
+  width: 32px;
+  vertical-align: middle;
+  margin-right: 8px;
+}
+
+.collection-item .material-icons.tiny {
+  font-size: 1.1em;
+  vertical-align: middle;
+}
+
+/* Modal styles for card detail */
+#card-detail-modal {
+  max-width: 80%;
+  margin: 0 auto;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+#card-detail-modal .modal-content {
+  padding-bottom: 0;
+  overflow: visible;
+}
+#card-detail-modal img {
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+#card-detail-modal h4 {
+  margin-bottom: 0.5em;
+}
+#card-detail-modal #modal-card-copies {
+  font-size: 1.1em;
+  margin-top: 0.5em;
+  font-weight: 500;
+}
+#card-detail-modal .row {
+  margin-bottom: 0.5em;
+}
+#card-detail-modal .modal-footer {
+  background: #f5f5f5;
+  border-top: 1px solid #eee;
+}
+#card-detail-modal .fusion-icon-wrap, #card-detail-modal .equip-icon-wrap {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 8px;
+}
+#card-detail-modal .fusion-count, #card-detail-modal .equip-count {
+  font-size: 0.95em;
+  margin-left: 2px;
+  color: #1976d2;
+  font-weight: bold;
+}
+#card-detail-modal .equip-count {
+  color: #ff9800;
+}
+#card-detail-modal .col img {
+  margin-bottom: 4px;
+}
+#card-detail-modal .col {
+  margin-bottom: 10px;
+}
+#card-detail-modal .modal-content h5 {
+  margin-top: 1.2em;
+  margin-bottom: 0.5em;
+  font-size: 1.15em;
+  font-weight: 600;
+}
+#card-detail-modal .modal-content p {
+  margin-bottom: 0.7em;
+}
+#card-detail-modal .modal-content span {
+  word-break: break-word;
+}
+#card-detail-modal .modal-close-btn {
+  position: absolute;
+  top: 10px;
+  right: 18px;
+  color: #888;
+  font-weight: bold;
+  z-index: 10;
+  transition: color 0.2s;
+}
+#card-detail-modal .modal-close-btn:hover {
+  color: #d32f2f;
+}
+#card-detail-modal .fusion-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+#card-detail-modal .fusion-card-info {
+  text-align: center;
+}
+#card-detail-modal .fusion-result-info {
+  text-align: center;
+}
+#card-detail-modal .fusion-result-highlight {
+  border: 2px solid #1976d2;
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: #e3f2fd;
+}
+#card-detail-modal .fusion-result-info img {
+  margin-bottom: 2px;
+}
+#card-detail-modal .fusion-card-info img {
+  margin-bottom: 2px;
+}
+#card-detail-modal .modal-content .col.s12.m8 {
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.card-item-right {
+  float: right;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.equip-fixed, .fusion-fixed {
+  min-width: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.equip-fixed {
+  width: 20px;
+}
+.fusion-fixed {
+  width: 20px;
+}
+.card-item-name {
+  font-weight: 500;
+  margin-left: 2px;
+  max-width: 100px;
+  display: inline-block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+@media (min-width: 600px) {
+  .card-item-name {
+    max-width: 160px;
+  }
+}
+@media (min-width: 992px) {
+  .card-item-name {
+    max-width: 420px;
+  }
+}
+.card-thumb {
+  height: 32px;
+  width: 32px;
+  vertical-align: middle;
+  margin-right: 8px;
+}
+
+/* In-game hand card slot styles */
+.card-slot {
+    width: 90px;
+    height: 130px;
+    border: 2px dashed #1976d2;
+    border-radius: 10px;
+    background: #f8fafc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    transition: box-shadow 0.2s;
+    cursor: pointer;
+}
+.card-slot .slot-inner.empty {
+    color: #1976d2;
+    font-size: 2.5em;
+    font-weight: bold;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    opacity: 0.7;
+}
+.card-slot .slot-inner.empty::before {
+    content: '+';
+    font-size: 2.5em;
+    display: block;
+    margin-bottom: 0.1em;
+}
+.card-slot .slot-inner.empty {
+    font-size: 1em;
+    font-weight: normal;
+}
