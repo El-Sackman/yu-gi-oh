@@ -494,23 +494,6 @@ $(function() {
         }
     });
 
-    // Add click handler for board tiles
-    $('#game-board .board-cell').off('click').on('click', function() {
-        const existingCardImg = $(this).find('img');
-        if (existingCardImg.length === 0) {
-            M.toast && M.toast({html: 'No card selected on this tile!'});
-            return;
-        }
-
-        const cardId = parseInt(existingCardImg.attr('data-card-id'), 10);
-        if (!isNaN(cardId)) {
-            graveyard.unshift(cardId); // Add to graveyard
-            renderGraveyard(cardsCache);
-        }
-
-        existingCardImg.remove(); // Remove card from board tile
-    });
-
     // Place cards logic
     $('#place-cards-btn').off('click').on('click', function() {
         let resultCard = null;
