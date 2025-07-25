@@ -4,9 +4,9 @@
     <title>Basic Material Design Page</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.100.2/css/materialize.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
     <script type="text/javascript" src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.100.2/js/materialize.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
     <script src="public/localStorageLib.js"></script>
     <link rel="stylesheet" href="public/yu-gi-oh.css">
 </head>
@@ -14,14 +14,14 @@
     <nav>
         <div class="nav-wrapper">
             <a href="#" class="brand-logo">Logo</a>
-            <a href="#" data-activates="side-nav-mobile" class="button-collapse"><i class="material-icons">menu</i></a>
+            <a href="#" data-target="side-nav-mobile" class="sidenav-trigger"><i class="material-icons">menu</i></a>
             <ul id="nav-mobile" class="right hide-on-med-and-down">
                 <li><a href="#your-cards" class="nav-link" data-section="your-cards.html">Your Cards</a></li>
                 <li><a href="#in-game" class="nav-link" data-section="in-game.html">In Game</a></li>
                 <li><a href="#all-cards" class="nav-link" data-section="all-cards.html">All Cards</a></li>
                 <li><a href="#enemies" class="nav-link" data-section="enemies.html">Enemies</a></li>
             </ul>
-            <ul class="side-nav" id="side-nav-mobile">
+            <ul id="side-nav-mobile" class="sidenav">
                 <li><a href="#your-cards" class="nav-link" data-section="your-cards.html">Your Cards</a></li>
                 <li><a href="#in-game" class="nav-link" data-section="in-game.html">In Game</a></li>
                 <li><a href="#all-cards" class="nav-link" data-section="all-cards.html">All Cards</a></li>
@@ -59,10 +59,12 @@
             $("#main-content").load(section);
         }
         // Initialize mobile menu (fix: use correct id)
-        $(".button-collapse").sideNav({
-            menuWidth: 240,
-            edge: 'left',
-            closeOnClick: true
+        document.addEventListener('DOMContentLoaded', function() {
+            const elems = document.querySelectorAll('.sidenav');
+            const instances = M.Sidenav.init(elems, {
+                edge: 'left',
+                draggable: true
+            });
         });
         // Load initial section
         var initialSection = getInitialSection();
@@ -70,7 +72,7 @@
         // Set nav active state
         function setActiveNav(section) {
             $('.nav-link').removeClass('active');
-            $('.nav-link[data-section="'+section+'"], .side-nav .nav-link[data-section="'+section+'"], .right .nav-link[data-section="'+section+'"').addClass('active');
+            $('.nav-link[data-section="'+section+'"], .sidenav .nav-link[data-section="'+section+'"], .right .nav-link[data-section="'+section+'"').addClass('active');
         }
         setActiveNav(initialSection);
         // Navigation click
@@ -85,7 +87,7 @@
             window.location.hash = hash;
             // Close sidenav on mobile after click
             if ($(window).width() < 993) {
-                $(".button-collapse").sideNav('hide');
+                $(".sidenav-trigger").sideNav('hide');
             }
         });
         // Listen for hashchange (back/forward navigation)
