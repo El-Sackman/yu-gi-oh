@@ -9,6 +9,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
     <script src="public/localStorageLib.js"></script>
     <link rel="stylesheet" href="public/yu-gi-oh.css">
+    <script src="public/cardInteractions.js"></script>
 </head>
 <body>
     <nav>
@@ -33,6 +34,8 @@
         <div class="row">
             <div class="col s12">
                 <div id="main-content"></div>
+                <!-- Card Interactions Demo -->
+                <div id="card-interaction-demo" style="margin-top:2em;"></div>
             </div>
         </div>
     </div>
@@ -97,6 +100,31 @@
             setSection(section);
             loadSection(section);
             setActiveNav(section);
+        });
+        // Card Interactions Demo
+        $.when(
+            $.getJSON('public/cards.json'),
+            $.getJSON('public/fusion.json'),
+            $.getJSON('public/equips.json')
+        ).done(function(cardsRes, fusionRes, equipsRes) {
+            var cards = cardsRes[0], fusionData = fusionRes[0], equipsData = equipsRes[0];
+            // Example: Try merging two cards
+            var demoHand = [1, 2, 3, null, null]; // Example card IDs
+            var merges = CardInteractions.getPossibleMerges(demoHand, cards, fusionData, equipsData);
+            var html = '<h5>Card Interactions Demo</h5>';
+            html += '<div>Hand: ' + demoHand.filter(Boolean).map(id => `#${id.toString().padStart(3,'0')}`).join(', ') + '</div>';
+            if (merges.length > 0) {
+                html += '<ul>' + merges.map(m => {
+                    if (m.type === 'fusion') {
+                        return `<li>Fusion: #${m.a.toString().padStart(3,'0')} + #${m.b.toString().padStart(3,'0')} → #${m.result.toString().padStart(3,'0')}</li>`;
+                    } else {
+                        return `<li>Equip: #${m.a.toString().padStart(3,'0')} + #${m.b.toString().padStart(3,'0')}</li>`;
+                    }
+                }).join('') + '</ul>';
+            } else {
+                html += '<div>No possible merges in hand.</div>';
+            }
+            $('#card-interaction-demo').html(html);
         });
     });
     </script>

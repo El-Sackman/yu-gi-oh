@@ -52,6 +52,7 @@
         </div>
     </div>
 </section>
+<script src="public/cardTemplates.js"></script>
 <script>
 $(function() {
     // Load deck from localStorage
@@ -73,98 +74,32 @@ $(function() {
         var equipsData = renderHand.equipsData;
         for (let i = 0; i < 5; ++i) {
             const slot = $(`#hand-slots .card-slot[data-slot="${i}"]`);
-            const slotInner = slot.find('.slot-inner');
             let borderColor = '';
             if (hand[i] && cards) {
                 const card = cards.find(c => c.Id === hand[i]);
                 if (card) {
-                    // Check for possible fusions with other cards in hand
                     let canFuse = false, canEquip = false;
-                    // Fusions: check if this card can fuse with any other in hand
-                    if (fusionData[card.Id]) {
-                        for (let j = 0; j < 5; ++j) {
-                            if (i === j || !hand[j]) continue;
-                            const otherId = hand[j];
-                            if (fusionData[card.Id].some(f => f.card === otherId)) {
-                                canFuse = true;
-                                break;
-                            }
-                        }
+                    for (let j = 0; j < 5; ++j) {
+                        if (i === j || !hand[j]) continue;
+                        const otherId = hand[j];
+                        if (CardInteractions.canFuse(card.Id, otherId, fusionData)) canFuse = true;
+                        if (CardInteractions.canEquip(card.Id, otherId, equipsData)) canEquip = true;
                     }
-                    // Equips: check if this card can be equipped by any other in hand
-                    if (equipsData[card.Id]) {
-                        for (let j = 0; j < 5; ++j) {
-                            if (i === j || !hand[j]) continue;
-                            const otherId = hand[j];
-                            if (equipsData[card.Id].includes(otherId)) {
-                                canEquip = true;
-                                break;
-                            }
-                        }
-                    }
-                    // Set border color: purple if both, blue if fusion, orange if equip
-                    if (canFuse && canEquip) borderColor = '#9c27b0'; // purple
-                    else if (canFuse) borderColor = '#1976d2'; // blue
-                    else if (canEquip) borderColor = '#ff9800'; // orange
-                    slotInner.removeClass('empty').html(`<img src="${card.img}" alt="" style="width:70px;height:100px;object-fit:contain;display:block;margin:0 auto 4px auto;"/><div style='font-size:0.9em;text-align:center;'>#${card.Id.toString().padStart(3,'0')}</div>`);
+                    if (canFuse && canEquip) borderColor = '#9c27b0';
+                    else if (canFuse) borderColor = '#1976d2';
+                    else if (canEquip) borderColor = '#ff9800';
+                    slot.html(CardTemplates.handCard(card, borderColor));
                 } else {
-                    slotInner.addClass('empty').html("");
+                    slot.html(CardTemplates.handCard(null));
                 }
             } else {
-                slotInner.addClass('empty').html("");
+                slot.html(CardTemplates.handCard(null));
             }
-            // Set border color
-            if (borderColor) {
-                slot.css('border', `3px solid ${borderColor}`);
-            } else {
-                slot.css('border', '2px dashed #1976d2');
-            }
+            slot.css('border', borderColor ? `3px solid ${borderColor}` : '2px dashed #1976d2');
         }
         // After rendering hand slots, show possible merges
         let mergesHtml = '';
-        let foundMerges = [];
-        // Fusions
-        for (let i = 0; i < 5; ++i) {
-            if (!hand[i]) continue;
-            const cardA = cards.find(c => c.Id === hand[i]);
-            if (!cardA) continue;
-            if (fusionData[cardA.Id]) {
-                for (let j = 0; j < 5; ++j) {
-                    if (i === j || !hand[j]) continue;
-                    const cardB = cards.find(c => c.Id === hand[j]);
-                    if (!cardB) continue;
-                    const fusion = fusionData[cardA.Id].find(f => f.card === cardB.Id);
-                    if (fusion) {
-                        const result = cards.find(c => c.Id === fusion.result);
-                        if (result) {
-                            // Avoid duplicate pairs (A+B and B+A)
-                            if (!foundMerges.some(m => m.type==='fusion' && ((m.a===cardA.Id && m.b===cardB.Id) || (m.a===cardB.Id && m.b===cardA.Id)))) {
-                                foundMerges.push({type:'fusion', a:cardA.Id, b:cardB.Id, result:result.Id});
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        // Equips
-        for (let i = 0; i < 5; ++i) {
-            if (!hand[i]) continue;
-            const cardA = cards.find(c => c.Id === hand[i]);
-            if (!cardA) continue;
-            if (equipsData[cardA.Id]) {
-                for (let j = 0; j < 5; ++j) {
-                    if (i === j || !hand[j]) continue;
-                    const cardB = cards.find(c => c.Id === hand[j]);
-                    if (!cardB) continue;
-                    if (equipsData[cardA.Id].includes(cardB.Id)) {
-                        // Avoid duplicate pairs (A+B and B+A)
-                        if (!foundMerges.some(m => m.type==='equip' && ((m.a===cardA.Id && m.b===cardB.Id) || (m.a===cardB.Id && m.b===cardA.Id)))) {
-                            foundMerges.push({type:'equip', a:cardA.Id, b:cardB.Id});
-                        }
-                    }
-                }
-            }
-        }
+        let foundMerges = CardInteractions.getPossibleMerges(hand, cards, fusionData, equipsData);
         if (foundMerges.length > 0) {
             mergesHtml += '<h5>Possible Merges in Hand</h5>';
             mergesHtml += '<ul class="merge-list-view" style="list-style:none;padding:0;margin:0;">';
@@ -173,44 +108,11 @@ $(function() {
                     const cardA = cards.find(c => c.Id === m.a);
                     const cardB = cards.find(c => c.Id === m.b);
                     const result = cards.find(c => c.Id === m.result);
-                    mergesHtml += `<li class="merge-list-item" data-a="${cardA.Id}" data-b="${cardB.Id}" style="margin-bottom:16px;padding:8px 0;">
-                        <div style="display:flex;align-items:center;gap:18px;justify-content:flex-start;">
-                            <div class="merge-card-thumb" data-handid="${cardA.Id}" style='text-align:center;cursor:pointer;'>
-                                <div style='font-size:1.2em;font-weight:bold;'>#${cardA.Id.toString().padStart(3,'0')}</div>
-                                <img src="${cardA.img}" alt="${cardA.Name}" title="${cardA.Name}" style="height:56px;width:40px;object-fit:contain;border-radius:8px;box-shadow:0 2px 8px rgba(25,118,210,0.10);">
-                            </div>
-                            <span style="font-size:2em;">+</span>
-                            <div class="merge-card-thumb" data-handid="${cardB.Id}" style='text-align:center;cursor:pointer;'>
-                                <div style='font-size:1.2em;font-weight:bold;'>#${cardB.Id.toString().padStart(3,'0')}</div>
-                                <img src="${cardB.img}" alt="${cardB.Name}" title="${cardB.Name}" style="height:56px;width:40px;object-fit:contain;border-radius:8px;box-shadow:0 2px 8px rgba(25,118,210,0.10);">
-                            </div>
-                            <span style="font-size:2em;">→</span>
-                            <div style='text-align:center;'>
-                                <img src="${result.img}" alt="${result.Name}" title="${result.Name}" style="height:80px;width:56px;object-fit:contain;border-radius:10px;border:2px solid #1976d2;box-shadow:0 2px 12px rgba(25,118,210,0.18);">
-                                <div style='font-size:1.18em;font-weight:bold;margin-top:2px;'>#${result.Id.toString().padStart(3,'0')}</div>
-                                <div style='font-size:1.05em;color:#1976d2;'>ATK/${result.Attack} DEF/${result.Defense}</div>
-                            </div>
-                            <span style='margin-left:12px;color:#1976d2;font-weight:bold;'>Fusion</span>
-                        </div>
-                    </li>`;
+                    mergesHtml += CardTemplates.mergeFusion(cardA, cardB, result);
                 } else if (m.type === 'equip') {
                     const cardA = cards.find(c => c.Id === m.a);
                     const cardB = cards.find(c => c.Id === m.b);
-                    mergesHtml += `<li class="merge-list-item" data-a="${cardA.Id}" data-b="${cardB.Id}" style="margin-bottom:16px;padding:8px 0;">
-                        <div style="display:flex;align-items:center;gap:18px;justify-content:flex-start;">
-                            <div class="merge-card-thumb" data-handid="${cardA.Id}" style='text-align:center;cursor:pointer;'>
-                                <div style='font-size:1.2em;font-weight:bold;'>#${cardA.Id.toString().padStart(3,'0')}</div>
-                                <img src="${cardA.img}" alt="${cardA.Name}" title="${cardA.Name}" style="height:56px;width:40px;object-fit:contain;border-radius:8px;box-shadow:0 2px 8px rgba(255,152,0,0.10);">
-                            </div>
-                            <span style="font-size:2em;">+</span>
-                            <div class="merge-card-thumb" data-handid="${cardB.Id}" style='text-align:center;cursor:pointer;'>
-                                <div style='font-size:1.2em;font-weight:bold;'>#${cardB.Id.toString().padStart(3,'0')}</div>
-                                <img src="${cardB.img}" alt="${cardB.Name}" title="${cardB.Name}" style="height:56px;width:40px;object-fit:contain;border-radius:8px;box-shadow:0 2px 8px rgba(255,152,0,0.10);">
-                            </div>
-                            <span style="font-size:2em;">→</span>
-                            <span style="font-size:1.25em;color:#ff9800;font-weight:bold;">Equip</span>
-                        </div>
-                    </li>`;
+                    mergesHtml += CardTemplates.mergeEquip(cardA, cardB);
                 }
             });
             mergesHtml += '</ul>';
@@ -237,7 +139,7 @@ $(function() {
             html = graveyard.map(cardId => {
                 const card = cards.find(c => c.Id === cardId);
                 if (!card) return '';
-                return `<li class="collection-item"><img src="${card.img}" alt="" style="height:32px;width:32px;object-fit:contain;margin-right:8px;vertical-align:middle;">#${card.Id.toString().padStart(3,'0')} - ${card.Name}</li>`;
+                return CardTemplates.graveyardCard(card);
             }).join('');
         }
         $('#graveyard-list').html(html);
@@ -251,7 +153,6 @@ $(function() {
         if (deck.length === 0) {
             html = '<li class="collection-item grey-text">Deck is empty</li>';
         } else {
-            // Count occurrences
             const countMap = {};
             deck.forEach(cardId => { countMap[cardId] = (countMap[cardId]||0)+1; });
             let uniqueIds = Object.keys(countMap).map(Number);
@@ -259,8 +160,7 @@ $(function() {
             html = uniqueIds.map(cardId => {
                 const card = cards.find(c => c.Id === cardId);
                 if (!card) return '';
-                let badge = countMap[cardId] > 1 ? `<span class='badge blue white-text'>x${countMap[cardId]}</span>` : '';
-                return `<li class="collection-item"><img src="${card.img}" alt="" style="height:32px;width:32px;object-fit:contain;margin-right:8px;vertical-align:middle;">#${card.Id.toString().padStart(3,'0')} - ${card.Name} ${badge}</li>`;
+                return CardTemplates.deckCard(card, countMap[cardId]);
             }).join('');
         }
         $('#in-game-deck-list').html(html);
@@ -398,7 +298,7 @@ $(function() {
             if (alreadySelected !== -1) {
                 // Deselect if already selected
                 selectedCards.splice(alreadySelected, 1);
-                $(this).removeClass(`selected-${alreadySelected + 1}`).find('.merge-number').remove();
+                $(this).removeClass(`selected-${alreadyAlreadySelected + 1}`).find('.merge-number').remove();
                 // Update numbers and classes for remaining selections
                 selectedCards.forEach((s, i) => {
                     const slotElement = $(`#hand-slots .card-slot[data-slot="${s.slot}"]`);
@@ -416,81 +316,68 @@ $(function() {
     // Add click handler for board cells
     $('#game-board .board-cell').off('click').on('click', function() {
         const cell = $(this);
+        const existingCardImg = cell.find('img');
+        const hasBoardCard = existingCardImg.length > 0;
+        const selectedCount = selectedCards.length;
         let resultCard = null;
 
-        if (selectedCards.length === 1) {
-            // If only one card is selected, use it directly
-            resultCard = cardsCache.find(c => c.Id === selectedCards[0].cardId);
-        } else if (selectedCards.length > 1) {
-            // If more than one card is selected, merge them first
-            let currentMerge = [...selectedCards];
-
-            while (currentMerge.length > 1) {
-                const pair = currentMerge.splice(0, 2);
-                const mergeResult = attemptMerge(pair.map(s => s.cardId));
-                if (!mergeResult) {
-                    // If no merge result, use the second card as the result
-                    resultCard = cardsCache.find(c => c.Id === pair[1].cardId);
-                } else {
-                    resultCard = mergeResult;
+        // 1. No hand card selected
+        if (selectedCount === 0) {
+            if (!hasBoardCard) {
+                M.toast && M.toast({ html: 'No card selected. Please select one or more cards from your hand.' });
+            } else {
+                // Remove card from board and send to graveyard
+                const cardId = parseInt(existingCardImg.attr('data-card-id'), 10);
+                if (!isNaN(cardId)) {
+                    graveyard.unshift(cardId);
+                    renderGraveyard(cardsCache);
                 }
+                cell.empty();
+                M.toast && M.toast({ html: 'Card sent to graveyard.' });
+            }
+            return;
+        }
 
-                if (currentMerge.length > 0) {
-                    currentMerge.unshift({ slot: null, cardId: resultCard.Id });
-                }
+        // Helper: get result from selected hand cards
+        function getHandMergeResult() {
+            if (selectedCount === 1) {
+                return cardsCache.find(c => c.Id === selectedCards[0].cardId);
+            } else {
+                // Use CardInteractions.merge for multi-card merge
+                const mergeResult = CardInteractions.merge(selectedCards.map(s => s.cardId), cardsCache, renderHand.fusionData, renderHand.equipsData);
+                return mergeResult;
             }
         }
 
-        if (resultCard) {
-            if (cell.is(':empty')) {
-                // Place result on the board
-                cell.html(`
-                    <div style="position:relative;">
-                        <img src="${resultCard.img}" alt="${resultCard.Name}" style="width:70px;height:100px;object-fit:contain;">
-                        <div style="position:absolute;bottom:0;left:0;width:100%;background:rgba(0,0,0,0.7);color:white;font-size:0.8em;text-align:center;padding:2px 0;">
-                            ATK/${resultCard.Attack} DEF/${resultCard.Defense}
-                        </div>
-                    </div>
-                `);
+        // 2. Hand card(s) selected
+        resultCard = getHandMergeResult();
+        if (!hasBoardCard) {
+            // Empty tile
+            if (resultCard) {
+                cell.html(CardTemplates.boardCard(resultCard));
                 M.toast && M.toast({ html: `Successfully placed ${resultCard.Name} on the board!` });
-
                 // Remove selected cards from hand
-                selectedCards.forEach(s => {
-                    if (s.slot !== null) hand[s.slot] = null;
-                });
+                selectedCards.forEach(function(s) { if (s.slot !== null) hand[s.slot] = null; });
                 renderHand(cardsCache);
                 resetSelectedCards();
-            } else {
-                // Attempt to merge with the existing card in the cell
-                const existingCardImg = cell.find('img');
-                if (existingCardImg.length) {
-                    const existingCardId = parseInt(existingCardImg.attr('data-card-id'), 10);
-                    console.log(existingCardImg.attr('data-card-id'), existingCardId, resultCard.Id);
-                    const mergeResult = attemptMerge([existingCardId, resultCard.Id]);
-                    if (mergeResult) {
-                        cell.html(`
-                            <div style="position:relative;">
-                                <img src="${mergeResult.img}" alt="${mergeResult.Name}" style="width:70px;height:100px;object-fit:contain;">
-                                <div style="position:absolute;bottom:0;left:0;width:100%;background:rgba(0,0,0,0.7);color:white;font-size:0.8em;text-align:center;padding:2px 0;">
-                                    ATK/${mergeResult.Attack} DEF/${mergeResult.Defense}
-                                </div>
-                            </div>
-                        `);
-                        M.toast && M.toast({ html: `Merged into ${mergeResult.Name}!` });
-
-                        // Remove selected cards from hand
-                        selectedCards.forEach(s => {
-                            if (s.slot !== null) hand[s.slot] = null;
-                        });
-                        renderHand(cardsCache);
-                        resetSelectedCards();
-                    } else {
-                        M.toast && M.toast({ html: 'Merge failed. Try a different combination!' });
-                    }
-                }
             }
         } else {
-            M.toast && M.toast({ html: 'No valid card to place!' });
+            // Tile has a card
+            const boardCardId = parseInt(existingCardImg.attr('data-card-id'), 10);
+            if (isNaN(boardCardId)) return;
+            // Try to merge using CardInteractions.merge
+            const mergeResult = CardInteractions.merge([boardCardId, resultCard.Id], cardsCache, renderHand.fusionData, renderHand.equipsData);
+            if (mergeResult) {
+                cell.html(CardTemplates.boardCard(mergeResult));
+                M.toast && M.toast({ html: `Merged into ${mergeResult.Name}!` });
+            } else {
+                cell.html(CardTemplates.boardCard(resultCard));
+                M.toast && M.toast({ html: `Board card replaced with ${resultCard.Name}.` });
+            }
+            // Remove selected cards from hand
+            selectedCards.forEach(function(s) { if (s.slot !== null) hand[s.slot] = null; });
+            renderHand(cardsCache);
+            resetSelectedCards();
         }
     });
 
@@ -498,8 +385,18 @@ $(function() {
     $('#game-board .board-cell').off('click').on('click', function() {
         const existingCardImg = $(this).find('img');
         if (existingCardImg.length === 0) {
-            M.toast && M.toast({html: 'No card selected on this tile!'});
-            return;
+            console.log("selectedCards",selectedCards)
+            if (selectedCards.length > 0) {
+                const resultCard = selectedCards.reduce((a, b) => attemptMerge([a.Id, b.Id]), selectedCards[0]);
+                if (resultCard) {
+                    $(this).html(CardTemplates.boardCard(resultCard));
+                    M.toast && M.toast({ html: `Successfully placed ${resultCard.Name} on the board!` });
+                    // Remove selected cards from hand
+                    selectedCards.forEach(function(s) { if (s.slot !== null) hand[s.slot] = null; });
+                    renderHand(cardsCache);
+                    resetSelectedCards();
+                }
+            }
         }
 
         const cardId = parseInt(existingCardImg.attr('data-card-id'), 10);
@@ -520,36 +417,14 @@ $(function() {
                 resultCard = cardsCache.find(c => c.Id === selectedCards[0].cardId);
             }
         }
-
-        let currentMerge = [...selectedCards];
-
-        while (currentMerge.length > 1) {
-            const pair = currentMerge.splice(0, 2);
-            const mergeResult = attemptMerge(pair.map(s => s.cardId));
-            if (!mergeResult) {
-                // If no merge result, use the second card as the result
-                resultCard = cardsCache.find(c => c.Id === pair[1].cardId);
-            } else {
-                resultCard = mergeResult;
-            }
-
-            if (currentMerge.length > 0) {
-                currentMerge.unshift({ slot: null, cardId: resultCard.Id });
-            }
+        // Use CardInteractions.merge for multi-card merge
+        if (selectedCards.length >= 2) {
+            resultCard = CardInteractions.merge(selectedCards.map(s => s.cardId), cardsCache, renderHand.fusionData, renderHand.equipsData);
         }
-
         if (resultCard) {
-            // Place result on the board
             const nextAvailableCell = $('.board-cell:empty').first();
             if (nextAvailableCell.length) {
-                nextAvailableCell.html(`
-                    <div style="position:relative;">
-                        <img src="${resultCard.img}" alt="${resultCard.Name}" style="width:70px;height:100px;object-fit:contain;">
-                        <div style="position:absolute;bottom:0;left:0;width:100%;background:rgba(0,0,0,0.7);color:white;font-size:0.8em;text-align:center;padding:2px 0;">
-                            ATK/${resultCard.Attack}</br>DEF/${resultCard.Defense}
-                        </div>
-                    </div>
-                `);
+                nextAvailableCell.html(CardTemplates.boardCard(resultCard));
                 M.toast && M.toast({ html: `Successfully placed ${resultCard.Name} on the board!` });
 
                 // Remove selected cards from hand
@@ -559,21 +434,11 @@ $(function() {
                 renderHand(cardsCache);
                 resetSelectedCards();
             } else {
-                M.toast && M.toast({ html: 'No available space on the board!' });
+                M.toast && M.toast({ html: 'No empty cells available on the board!' });
             }
+        } else {
+            M.toast && M.toast({ html: 'Failed to merge/place cards. Please try again.' });
         }
     });
-
-    // Mock function to attempt merge (replace with actual logic)
-    function attemptMerge(cardIds) {
-        // Example: Check if the first two cards can merge
-        if (cardIds.length >= 2 && renderHand.fusionData[cardIds[0]]) {
-            const fusion = renderHand.fusionData[cardIds[0]].find(f => f.card === cardIds[1]);
-            if (fusion) {
-                return cardsCache.find(c => c.Id === fusion.result);
-            }
-        }
-        return null;
-    }
 });
 </script>
